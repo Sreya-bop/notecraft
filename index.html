@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Notecraft — PDF to notes & flashcards</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#F4F3EE; --ink:#1B2027; --ink-soft:#565C64;
+  --line:#D9D7CC; --accent:#2F6E5E; --accent-ink:#0F2E26;
+  --gold:#B8862E; --card-back:#1C2541; --card-back-ink:#EDEFF7;
+  --danger:#B0402E; --radius:10px;
+  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#181A17; --ink:#EDEBE3; --ink-soft:#A9A79C; --line:#33352E;
+    --accent:#5FBBA0; --accent-ink:#101913; --gold:#D9A54B; --card-back:#101425; --card-back-ink:#E9ECF6;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#181A17; --ink:#EDEBE3; --ink-soft:#A9A79C; --line:#33352E;
+  --accent:#5FBBA0; --accent-ink:#101913; --gold:#D9A54B; --card-back:#101425; --card-back-ink:#E9ECF6;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px);height:100%}
+*{box-sizing:border-box}
+body{margin:0;min-height:100%;background:var(--paper);color:var(--ink);font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:"Source Serif 4",Georgia,serif;font-weight:700;margin:0}
+.wrap{max-width:760px;margin:0 auto;padding:20px 18px 60px}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:22px;flex-wrap:wrap}
+header h1{font-size:1.5rem;color:var(--ink)}
+header .tag{color:var(--ink-soft);font-size:.9rem}
+.drop{border:1.5px dashed var(--line);border-radius:var(--radius);padding:38px 20px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s}
+.drop:hover,.drop.drag{border-color:var(--accent);background:color-mix(in srgb, var(--accent) 6%, transparent)}
+.drop strong{display:block;font-size:1.05rem;margin-bottom:6px}
+.drop span{color:var(--ink-soft);font-size:.88rem}
+input[type=file]{display:none}
+.status{margin-top:16px;font-size:.92rem;color:var(--ink-soft);display:none}
+.status.show{display:block}
+.bar{height:4px;background:var(--line);border-radius:3px;overflow:hidden;margin-top:8px}
+.bar i{display:block;height:100%;width:8%;background:var(--accent);transition:width .25s}
+.err{color:var(--danger);margin-top:14px;font-size:.9rem;display:none}
+.results{display:none;margin-top:24px}
+.results.show{display:block}
+.meta-row{display:flex;gap:18px;color:var(--ink-soft);font-size:.85rem;margin-bottom:14px;flex-wrap:wrap}
+.tabs{display:flex;gap:6px;border-bottom:1px solid var(--line);margin-bottom:18px;position:sticky;top:env(safe-area-inset-top,0px);background:var(--paper);z-index:2;padding-top:4px}
+.tab{border:none;background:none;font:inherit;font-weight:600;color:var(--ink-soft);padding:10px 4px;cursor:pointer;border-bottom:2px solid transparent}
+.tab.active{color:var(--ink);border-color:var(--accent)}
+.pane{display:none}
+.pane.active{display:block}
+.section{border:1px solid var(--line);border-radius:var(--radius);margin-bottom:14px;overflow:hidden}
+.section > summary{list-style:none;cursor:pointer;padding:13px 16px;font-weight:600;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.section > summary::-webkit-details-marker{display:none}
+.section > summary:after{content:"+";color:var(--ink-soft);font-weight:400}
+.section[open] > summary:after{content:"–"}
+.sec-body{padding:0 16px 16px}
+.sec-body ul{margin:0;padding-left:20px}
+.sec-body li{margin-bottom:8px}
+.kw{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.kw span{background:color-mix(in srgb, var(--gold) 18%, transparent);color:var(--gold);border-radius:20px;padding:3px 10px;font-size:.78rem;font-weight:600}
+.toolbar{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+button.action{font:inherit;font-weight:600;border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:8px;padding:8px 14px;cursor:pointer}
+button.action:hover{border-color:var(--accent);color:var(--accent)}
+.fc-wrap{max-width:520px;margin:0 auto}
+.fc-count{text-align:center;color:var(--ink-soft);font-size:.85rem;margin-bottom:10px}
+.card{perspective:1200px;height:230px;cursor:pointer}
+.card-inner{position:relative;width:100%;height:100%;transition:transform .5s;transform-style:preserve-3d}
+.card.flipped .card-inner{transform:rotateY(180deg)}
+.face{position:absolute;inset:0;border-radius:14px;backface-visibility:hidden;display:flex;align-items:center;justify-content:center;text-align:center;padding:26px;font-size:1.08rem;line-height:1.5}
+.front{background:var(--paper);border:1.5px solid var(--line);color:var(--ink)}
+.back{background:var(--card-back);color:var(--card-back-ink);transform:rotateY(180deg);font-weight:600}
+.face small{position:absolute;top:12px;left:16px;font-weight:600;font-size:.72rem;letter-spacing:.02em;opacity:.55}
+.fc-nav{display:flex;justify-content:center;align-items:center;gap:14px;margin-top:16px}
+.fc-nav button{width:42px;height:42px;border-radius:50%;border:1px solid var(--line);background:transparent;color:var(--ink);font-size:1.1rem;cursor:pointer}
+.fc-nav button:hover{border-color:var(--accent);color:var(--accent)}
+.fc-hint{text-align:center;color:var(--ink-soft);font-size:.8rem;margin-top:10px}
+.empty{color:var(--ink-soft);text-align:center;padding:40px 10px}
+@media(max-width:480px){.wrap{padding:16px 14px 50px}.card{height:260px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Notecraft</h1>
+    <span class="tag">PDF → notes & flashcards, entirely in your browser</span>
+  </header>
+
+  <div class="drop" id="drop">
+    <strong>Drop a PDF here, or tap to choose one</strong>
+    <span>Nothing leaves your browser — no API keys, no server, no internet needed after this page loads.</span>
+    <input type="file" id="file" accept="application/pdf">
+  </div>
+  <div class="status" id="status">Reading pages…<div class="bar"><i id="bar"></i></div></div>
+  <div class="err" id="err"></div>
+
+  <div class="results" id="results">
+    <div class="meta-row" id="metaRow"></div>
+    <div class="toolbar">
+      <button class="action" id="expNotes">Export notes (.md)</button>
+      <button class="action" id="expCards">Export flashcards (.csv)</button>
+      <button class="action" id="reset">Start over</button>
+    </div>
+    <div class="tabs">
+      <button class="tab active" data-pane="notes">Notes</button>
+      <button class="tab" data-pane="cards">Flashcards</button>
+    </div>
+    <div class="pane active" id="pane-notes"></div>
+    <div class="pane" id="pane-cards"></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+const STOP = new Set("a an the and or but if while is are was were be been being to of in on at for with as by from this that these those it its it's not no nor so than then there here their his her they he she we you your i my our us do does did doing have has had having can could will would shall should may might must into over under again further once about above below up down out off over such only own same too very just also more most other some such which who whom what when where why how all each every both few many any into onto".split(" "));
+
+let SECTIONS = [], SENTENCES_ALL = [], CARDS = [], GLOBAL_SCORED = [], docTitle = "document";
+
+const $ = s => document.querySelector(s);
+const drop = $("#drop"), fileInput = $("#file"), statusEl = $("#status"), bar = $("#bar"), errEl = $("#err"), resultsEl = $("#results");
+
+drop.addEventListener("click", () => fileInput.click());
+["dragenter","dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("drag"); }));
+["dragleave","drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("drag"); }));
+drop.addEventListener("drop", e => { const f = e.dataTransfer.files[0]; if (f) handleFile(f); });
+fileInput.addEventListener("change", e => { const f = e.target.files[0]; if (f) handleFile(f); });
+$("#reset").addEventListener("click", () => location.reload());
+
+function setProgress(pct, label){ statusEl.classList.add("show"); bar.style.width = pct + "%"; if(label) statusEl.firstChild.textContent = label; }
+
+async function handleFile(file){
+  errEl.style.display = "none"; resultsEl.classList.remove("show");
+  if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+    errEl.textContent = "Please choose a PDF file."; errEl.style.display = "block"; return;
+  }
+  docTitle = file.name.replace(/\.pdf$/i, "");
+  drop.style.display = "none";
+  setProgress(5, "Reading pages…");
+  try {
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    const lines = [];
+    for (let p = 1; p <= pdf.numPages; p++) {
+      const page = await pdf.getPage(p);
+      const content = await page.getTextContent();
+      let curY = null, curSize = null, curBold = false, buff = [], lastX = null;
+      for (const item of content.items) {
+        if (!item.str) continue;
+        const size = Math.round(item.transform[3] || item.height || 0);
+        const y = Math.round(item.transform[5]);
+        const x = item.transform[4];
+        const bold = /bold|black|heavy/i.test(item.fontName || "");
+        if (curY !== null && Math.abs(y - curY) > 2) {
+          if (buff.length) lines.push({ text: buff.join("").replace(/\s+/g," ").trim(), size: curSize, bold: curBold, page: p });
+          buff = []; lastX = null; curBold = false;
+        }
+        const gap = lastX === null ? 0 : x - lastX;
+        buff.push((lastX !== null && gap > 1 ? " " : "") + item.str);
+        lastX = x + (item.width || item.str.length * size * 0.5);
+        curY = y; curSize = size; curBold = curBold || bold;
+      }
+      if (buff.length) lines.push({ text: buff.join("").replace(/\s+/g," ").trim(), size: curSize, bold: curBold, page: p });
+      setProgress(5 + Math.round((p / pdf.numPages) * 45), `Reading page ${p} of ${pdf.numPages}…`);
+    }
+    setProgress(55, "Finding structure…");
+    buildSections(cleanLines(lines));
+    setProgress(70, "Scoring key sentences…");
+    scoreSentences();
+    setProgress(85, "Writing flashcards…");
+    buildFlashcards();
+    setProgress(100, "Done");
+    render();
+  } catch (e) {
+    console.error(e);
+    errEl.textContent = "Couldn't process that PDF (it may be scanned/image-only or encrypted). Try a text-based PDF.";
+    errEl.style.display = "block";
+    drop.style.display = "block";
+    statusEl.classList.remove("show");
+  }
+}
+
+function cleanLines(lines){
+  for (let i = 0; i < lines.length - 1; i++){
+    const t = lines[i].text;
+    if (/[a-z]-$/.test(t) && /^[a-z]/.test(lines[i+1].text || "")){
+      lines[i+1].text = t.slice(0,-1) + lines[i+1].text;
+      lines[i].text = "";
+    }
+  }
+  lines = lines.filter(l => l.text);
+  const freq = {};
+  lines.forEach(l => { if (l.text.length < 70) freq[l.text.toLowerCase()] = (freq[l.text.toLowerCase()]||0)+1; });
+  return lines.filter(l => {
+    if (/^[ivxlcdm\d]{1,6}$/i.test(l.text)) return false;
+    if (l.text.length < 70 && freq[l.text.toLowerCase()] >= 3) return false;
+    return true;
+  });
+}
+
+const JUNK_TITLE = /^(references?|bibliography|works cited|acknowledg(e)?ments?|appendix(es)?|index|table of contents|contents|about the author)\b/i;
+
+function buildSections(lines){
+  const sizes = lines.filter(l=>l.text).map(l=>l.size);
+  const bodySize = mode(sizes) || 10;
+  SECTIONS = []; let cur = { title: "Overview", lines: [], skip: false };
+  for (const l of lines){
+    if (!l.text || l.text.length < 1) continue;
+    const isHeading = ((l.size >= bodySize + 2 || l.bold) && l.text.length < 90 && !/[,:;]$/.test(l.text) && !/\.\s*$/.test(l.text)) ||
+                       /^(chapter|section|\d+(\.\d+)*)\s+[A-Z]/.test(l.text);
+    if (isHeading && l.text.split(" ").length < 14){
+      if (cur.lines.length && !cur.skip) SECTIONS.push(cur);
+      const title = l.text.replace(/\s{2,}/g," ");
+      cur = { title, lines: [], skip: JUNK_TITLE.test(title) };
+    } else if (!cur.skip) {
+      cur.lines.push(l.text);
+    }
+  }
+  if (cur.lines.length && !cur.skip) SECTIONS.push(cur);
+  SECTIONS = SECTIONS.filter(s => s.lines.join(" ").split(" ").length > 12);
+  if (!SECTIONS.length) SECTIONS = [{ title: docTitle, lines: lines.filter(l=>!JUNK_TITLE.test(l.text)).map(l=>l.text) }];
+}
+
+function mode(arr){
+  const c = {}; let best=null,bc=0;
+  for(const v of arr){ c[v]=(c[v]||0)+1; if(c[v]>bc){bc=c[v];best=v;} }
+  return best;
+}
+
+const ABBR_END = /\b(e\.g|i\.e|et al|etc|fig|eqs?|vs|approx|no|dr|mr|mrs|ms|prof|ph\.d|inc|ltd|jr|sr|vol|pp|cf|resp)\.$/i;
+function splitSentences(text){
+  const clean = text.replace(/\s+/g," ").trim();
+  const parts = clean.split(/(?<=[.!?])\s+(?=[A-Z0-9"“])/);
+  const merged = [];
+  for (const p of parts){
+    const prev = merged[merged.length-1];
+    if (prev && ABBR_END.test(prev)) merged[merged.length-1] = prev + " " + p;
+    else merged.push(p);
+  }
+  return merged.map(s=>s.trim()).filter(s=>s.length>25 && s.split(" ").length>4 && s.split(" ").length<75);
+}
+
+function jaccard(a,b){
+  const sb = new Set(b); let inter=0;
+  const sa = new Set(a);
+  sa.forEach(x => { if (sb.has(x)) inter++; });
+  return inter / (new Set([...sa,...sb]).size || 1);
+}
+function pickDiverse(scored, k){
+  const chosen = [];
+  for (const item of scored){
+    if (chosen.length >= k) break;
+    if (chosen.some(c => jaccard(c.toks, item.toks) > 0.55)) continue;
+    chosen.push(item);
+  }
+  return chosen;
+}
+
+function tokenize(s){
+  return (s.toLowerCase().match(/[a-z][a-z\-']{2,}/g) || []).filter(w=>!STOP.has(w));
+}
+
+let IDF = {};
+function scoreSentences(){
+  SENTENCES_ALL = [];
+  SECTIONS.forEach((sec, si) => {
+    sec.sentences = splitSentences(sec.lines.join(" "));
+    sec.sentences.forEach(s => SENTENCES_ALL.push({ s, si }));
+  });
+  const df = {}; const N = SENTENCES_ALL.length || 1;
+  SENTENCES_ALL.forEach(({s}) => { new Set(tokenize(s)).forEach(w => df[w]=(df[w]||0)+1); });
+  IDF = {}; for (const w in df) IDF[w] = Math.log((N+1)/(df[w]+0.5));
+
+  GLOBAL_SCORED = [];
+  SECTIONS.forEach(sec => {
+    sec.scored = sec.sentences.map(s => {
+      const toks = tokenize(s);
+      const tf = {}; toks.forEach(w=>tf[w]=(tf[w]||0)+1);
+      let score = 0; for (const w in tf) score += tf[w]*(IDF[w]||0);
+      score = score / Math.sqrt(toks.length || 1);
+      return { s, score, toks, sec: sec.title };
+    }).sort((a,b)=>b.score-a.score);
+    GLOBAL_SCORED.push(...sec.scored);
+  });
+  GLOBAL_SCORED.sort((a,b)=>b.score-a.score);
+}
+
+function buildFlashcards(){
+  CARDS = [];
+  const seen = new Set();
+  const bySec = {};
+  const defRe = /^([A-Z][A-Za-z0-9 \-']{2,45}?)\s+(?:is|are|refers to|means|is defined as|can be defined as|denotes)\s+(.{15,220}?)[.]?$/;
+  const colonRe = /^([A-Z][A-Za-z0-9 \-']{2,40})\s*[:–—]\s+(.{15,220}?)[.]?$/;
+  const acroRe = /\b([A-Z][A-Za-z\-]+(?:\s[A-Z][A-Za-z\-]+){0,4})\s*\(([A-Z]{2,8})\)/g;
+
+  SECTIONS.forEach(sec => {
+    bySec[sec.title] = [];
+    sec.sentences.forEach(s => {
+      const m = s.match(defRe) || s.match(colonRe);
+      if (m && m[1].split(" ").length < 7 && !seen.has(m[1].toLowerCase())) {
+        seen.add(m[1].toLowerCase());
+        bySec[sec.title].push({ q: `What is ${m[1].trim()}?`, a: m[2].trim().replace(/[.:]$/,"")+".", sec: sec.title });
+      }
+      let am;
+      while ((am = acroRe.exec(s))) {
+        if (!seen.has(am[2])) { seen.add(am[2]); bySec[sec.title].push({ q: `What does ${am[2]} stand for?`, a: am[1].trim()+".", sec: sec.title }); }
+      }
+    });
+    const top = pickDiverse(sec.scored || [], Math.max(2, Math.ceil(sec.sentences.length*0.3)));
+    top.forEach(({s}) => {
+      if (defRe.test(s) || colonRe.test(s)) return;
+      const termMatch = s.match(/\b(\d[\d,.]*%?|\$[\d,.]+\s?[a-zA-Z]*|[A-Z][a-zA-Z]+(?:\s[A-Z][a-zA-Z]+){0,3})\b/g);
+      if (!termMatch) return;
+      const candidates = termMatch.filter(t => t.length>2 && !seen.has(t.toLowerCase()) && s.indexOf(t)>0);
+      if (!candidates.length) return;
+      const term = candidates.sort((a,b)=> (/\d/.test(b)?1:0)-(/\d/.test(a)?1:0) || b.length-a.length)[0];
+      seen.add(term.toLowerCase());
+      const blanked = s.replace(term, "____");
+      if (blanked === s) return;
+      bySec[sec.title].push({ q: blanked, a: term, sec: sec.title });
+    });
+  });
+
+  const buckets = Object.values(bySec).filter(b=>b.length);
+  let i = 0;
+  while (CARDS.length < 50 && buckets.some(b=>b.length)) {
+    const b = buckets[i % buckets.length];
+    if (b.length) CARDS.push(b.shift());
+    i++;
+  }
+}
+
+function render(){
+  statusEl.classList.remove("show");
+  resultsEl.classList.add("show");
+  $("#metaRow").innerHTML = `<span>${SECTIONS.length} section${SECTIONS.length!==1?'s':''}</span><span>${SENTENCES_ALL.length} sentences analyzed</span><span>${CARDS.length} flashcards</span>`;
+
+  const takeaways = pickDiverse(GLOBAL_SCORED, Math.min(6, Math.max(3, Math.round(SECTIONS.length*1.2))));
+  const summaryHTML = takeaways.length ? `<details class="section" open>
+      <summary>Key takeaways</summary>
+      <div class="sec-body"><ul>${takeaways.map(t=>`<li>${escapeHTML(t.s)}</li>`).join("")}</ul></div>
+    </details>` : "";
+
+  const notesHTML = SECTIONS.map((sec, i) => {
+    const picks = pickDiverse(sec.scored||[], Math.max(3, Math.ceil(sec.sentences.length*0.3)))
+      .sort((a,b)=>sec.sentences.indexOf(a.s)-sec.sentences.indexOf(b.s));
+    const kwCount = {};
+    (sec.scored||[]).forEach(({toks}) => toks.forEach(w => kwCount[w]=(kwCount[w]||0)+(IDF[w]||0)));
+    const kws = Object.entries(kwCount).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([w])=>w);
+    return `<details class="section" ${i<2?'open':''}>
+      <summary>${escapeHTML(sec.title)}</summary>
+      <div class="sec-body">
+        <ul>${picks.map(p=>`<li>${escapeHTML(p.s)}</li>`).join("") || "<li>No distinct sentences found in this section.</li>"}</ul>
+        ${kws.length?`<div class="kw">${kws.map(k=>`<span>${escapeHTML(k)}</span>`).join("")}</div>`:""}
+      </div>
+    </details>`;
+  }).join("");
+  $("#pane-notes").innerHTML = (summaryHTML + notesHTML) || `<div class="empty">No readable text found in this PDF.</div>`;
+
+  renderCards();
+  document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+    document.querySelectorAll(".pane").forEach(x=>x.classList.remove("active"));
+    t.classList.add("active"); $("#pane-"+t.dataset.pane).classList.add("active");
+  }));
+
+  setupExports();
+}
+
+let cardIdx = 0;
+function renderCards(){
+  const pane = $("#pane-cards");
+  if (!CARDS.length){ pane.innerHTML = `<div class="empty">Couldn't derive clear flashcards from this document — try a text with more defined terms.</div>`; return; }
+  pane.innerHTML = `
+    <div class="fc-wrap">
+      <div class="fc-count" id="fcCount"></div>
+      <div class="card" id="fcCard"><div class="card-inner">
+        <div class="face front"><small>QUESTION</small><span id="fcQ"></span></div>
+        <div class="face back"><small>ANSWER</small><span id="fcA"></span></div>
+      </div></div>
+      <div class="fc-nav">
+        <button id="fcPrev" aria-label="Previous">‹</button>
+        <button id="fcFlip" aria-label="Flip">⟳</button>
+        <button id="fcNext" aria-label="Next">›</button>
+      </div>
+      <div class="fc-hint">Tap the card to flip</div>
+    </div>`;
+  const card = $("#fcCard");
+  const show = () => {
+    card.classList.remove("flipped");
+    $("#fcQ").textContent = CARDS[cardIdx].q;
+    $("#fcA").textContent = CARDS[cardIdx].a;
+    $("#fcCount").textContent = `Card ${cardIdx+1} of ${CARDS.length} — ${CARDS[cardIdx].sec}`;
+  };
+  card.addEventListener("click", () => card.classList.toggle("flipped"));
+  $("#fcFlip").addEventListener("click", e => { e.stopPropagation(); card.classList.toggle("flipped"); });
+  $("#fcPrev").addEventListener("click", () => { cardIdx = (cardIdx-1+CARDS.length)%CARDS.length; show(); });
+  $("#fcNext").addEventListener("click", () => { cardIdx = (cardIdx+1)%CARDS.length; show(); });
+  cardIdx = 0; show();
+}
+
+function escapeHTML(s){ return s.replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+
+function setupExports(){
+  $("#expNotes").onclick = () => download(`${docTitle}-notes.md`, buildNotesMD());
+  $("#expCards").onclick = () => download(`${docTitle}-flashcards.csv`, buildCardsCSV());
+}
+function buildNotesMD(){
+  const takeaways = pickDiverse(GLOBAL_SCORED, Math.min(6, Math.max(3, Math.round(SECTIONS.length*1.2))));
+  const head = takeaways.length ? `## Key takeaways\n\n` + takeaways.map(t=>`- ${t.s}`).join("\n") + "\n\n" : "";
+  return head + SECTIONS.map(sec => {
+    const picks = pickDiverse(sec.scored||[], Math.max(3, Math.ceil(sec.sentences.length*0.3))).sort((a,b)=>sec.sentences.indexOf(a.s)-sec.sentences.indexOf(b.s));
+    return `## ${sec.title}\n\n` + picks.map(p=>`- ${p.s}`).join("\n");
+  }).join("\n\n");
+}
+function buildCardsCSV(){
+  const esc = t => `"${t.replace(/"/g,'""')}"`;
+  return "Question,Answer\n" + CARDS.map(c=>`${esc(c.q)},${esc(c.a)}`).join("\n");
+}
+async function download(filename, text){
+  try {
+    const dl = await claude.use("downloads");
+    if (dl) { await dl.save({ filename, data: text }); return; }
+  } catch(e) { /* fall through */ }
+  const blob = new Blob([text], {type:"text/plain"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = filename; a.click();
+}
+</script>
+</body>
+</html>
